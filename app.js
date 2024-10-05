@@ -255,7 +255,7 @@ const PomodoroApp = () => {
 
     return (
         <div className="container">
-            <h1>Pomodoro Timer App</h1>
+            <h1>Pomodoro Timer App🍅</h1>
             <div>
                 <button className="btn" onClick={() => addTimer(5)}>Add 5min</button>
                 <button className="btn" onClick={() => addTimer(10)}>Add 10min</button>
