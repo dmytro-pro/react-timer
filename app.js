@@ -170,7 +170,7 @@ const Timer = ({ initialTime, onRemove }) => {
     };
 
     const handleDeleteClick = () => {
-        setShowDeleteConfirm(true);
+        setShowDeleteConfirm(!showDeleteConfirm);
     };
 
     const confirmDelete = () => {
@@ -218,11 +218,11 @@ const Timer = ({ initialTime, onRemove }) => {
                     <div className="bg-white p-4 rounded-lg">
                         <p>Are you sure you want to delete this timer?</p>
                         <div className="mt-4 flex justify-end">
-                            <Button onClick={() => setShowDeleteConfirm(false)} variant="outline" className="mr-2">
-                                Cancel
-                            </Button>
                             <Button onClick={confirmDelete} variant="destructive">
                                 Delete
+                            </Button>
+                            <Button onClick={() => setShowDeleteConfirm(false)} variant="outline" className="mr-2">
+                                Cancel
                             </Button>
                         </div>
                     </div>
