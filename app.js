@@ -148,16 +148,12 @@ const Timer = ({ initialTime, onRemove }) => {
     const handlePlayPause = () => {
         if (!isAudioEnabled) {
             setIsAudioEnabled(true);
-            audio.play().then(() => {
-                audio.pause();
-                audio.currentTime = 0;
-            }).catch(error => {
-                console.error("Audio play failed:", error);
-            });
+
+            audio.load();
         }
         if (time === 0) {
             setTime(1);
-            setIsRunning(1);
+            setIsRunning(true);
         } else {
             setIsRunning(!isRunning);
         }
