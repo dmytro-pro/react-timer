@@ -268,6 +268,11 @@ const PomodoroApp = () => {
                     onRemove={() => removeTimer(timer.id)}
                 />
             ))}
+            <footer className={"app-footer"}>
+                <a href="https://github.com/dmytro-pro/react-timer" className="github-link" target="_blank">
+                    <img className={"bottom-logo"} src="github-mark.svg" alt="github logo"/>dmytro-pro/react-timer
+                </a>
+            </footer>
         </div>
     );
 };
