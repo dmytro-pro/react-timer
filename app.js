@@ -107,6 +107,7 @@ const Timer = ({ initialTime, onRemove }) => {
     const [isComplete, setIsComplete] = useState(false);
     const [audio] = useState(new Audio('https://assets.mixkit.co/sfx/preview/mixkit-alarm-digital-clock-beep-989.mp3'));
     const [isAudioEnabled, setIsAudioEnabled] = useState(false);
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
     useEffect(() => {
         let interval;
@@ -154,9 +155,11 @@ const Timer = ({ initialTime, onRemove }) => {
                 console.error("Audio play failed:", error);
             });
         }
-        setIsRunning(!isRunning);
         if (time === 0) {
-            setTime(initialTime);
+            setTime(1);
+            setIsRunning(1);
+        } else {
+            setIsRunning(!isRunning);
         }
     };
 
@@ -168,6 +171,15 @@ const Timer = ({ initialTime, onRemove }) => {
 
     const adjustTime = (amount) => {
         setTime((prevTime) => Math.max(0, prevTime + amount));
+    };
+
+    const handleDeleteClick = () => {
+        setShowDeleteConfirm(true);
+    };
+
+    const confirmDelete = () => {
+        setShowDeleteConfirm(false);
+        onRemove();
     };
 
     return (
@@ -194,16 +206,32 @@ const Timer = ({ initialTime, onRemove }) => {
                     <Button className="reset-btn" onClick={resetTimer} variant="outline">
                         Reset
                     </Button>
-                    {isComplete && (
+                    {isComplete ? (
                         <Button onClick={stopSound} variant="outline">
                             <Volume2 />
                         </Button>
+                    ) : (
+                        <Button onClick={handleDeleteClick} variant="destructive">
+                            <X />
+                        </Button>
                     )}
-                    <Button onClick={onRemove} variant="destructive">
-                        <X />
-                    </Button>
                 </div>
             </CardContent>
+            {showDeleteConfirm && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div className="bg-white p-4 rounded-lg">
+                        <p>Are you sure you want to delete this timer?</p>
+                        <div className="mt-4 flex justify-end">
+                            <Button onClick={() => setShowDeleteConfirm(false)} variant="outline" className="mr-2">
+                                Cancel
+                            </Button>
+                            <Button onClick={confirmDelete} variant="destructive">
+                                Delete
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </Card>
     );
 };
@@ -211,9 +239,10 @@ const Timer = ({ initialTime, onRemove }) => {
 // PomodoroApp component
 const PomodoroApp = () => {
     const [timers, setTimers] = useState([
-        { id: 1, time: 5 * 60 },
-        { id: 2, time: 10 * 60 },
-        { id: 3, time: 25 * 60 },
+        { id: 1, time: 1 * 60 },
+        { id: 2, time: 5 * 60 },
+        { id: 3, time: 10 * 60 },
+        { id: 4, time: 25 * 60 },
     ]);
 
     const addTimer = (minutes) => {
