@@ -105,7 +105,7 @@ const Timer = ({ initialTime, onRemove }) => {
     const [isRunning, setIsRunning] = useState(false);
     const [name, setName] = useState(`${initialTime / 60} min timer`);
     const [isComplete, setIsComplete] = useState(false);
-    const [audio] = useState(new Audio('https://assets.mixkit.co/sfx/preview/mixkit-alarm-digital-clock-beep-989.mp3'));
+    const [audio] = useState(new Audio('trimmed_audio.mp3'));
     const [isAudioEnabled, setIsAudioEnabled] = useState(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
