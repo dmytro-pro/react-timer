@@ -102,6 +102,7 @@ const Volume2 = () => (
 // Timer component
 const Timer = ({ initialTime, onRemove }) => {
     const [time, setTime] = useState(initialTime);
+    const [currentInitialTime, setCurrentInitialTime] = useState(initialTime);
     const [isRunning, setIsRunning] = useState(false);
     const [name, setName] = useState(`${initialTime / 60} min timer`);
     const [isComplete, setIsComplete] = useState(false);
@@ -141,14 +142,13 @@ const Timer = ({ initialTime, onRemove }) => {
 
     const resetTimer = () => {
         stopSound();
-        setTime(initialTime);
+        setTime(currentInitialTime);
         setIsRunning(false);
     };
 
     const handlePlayPause = () => {
         if (!isAudioEnabled) {
             setIsAudioEnabled(true);
-
             audio.load();
         }
         if (time === 0) {
@@ -166,7 +166,11 @@ const Timer = ({ initialTime, onRemove }) => {
     };
 
     const adjustTime = (amount) => {
-        setTime((prevTime) => Math.max(0, prevTime + amount));
+        const newTime = Math.max(0, time + amount);
+        setTime(newTime);
+        if (!isRunning) {
+            setCurrentInitialTime(newTime);
+        }
     };
 
     const handleDeleteClick = () => {
@@ -231,7 +235,6 @@ const Timer = ({ initialTime, onRemove }) => {
         </Card>
     );
 };
-
 // PomodoroApp component
 const PomodoroApp = () => {
     const [timers, setTimers] = useState([
