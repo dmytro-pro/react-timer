@@ -99,30 +99,175 @@ const Volume2 = () => (
     </IconWrapper>
 );
 
+// Create a debounce function for optimized state updates
+const debounce = (func, wait) => {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+};
+
+// High-precision timer formatter function (defined outside component to avoid initialization issues)
+const formatTimeDisplay = (milliseconds, showMs = false) => {
+    // Ensure non-negative value
+    const ms = Math.max(0, milliseconds);
+    const totalSeconds = ms / 1000;
+    const mins = Math.floor(totalSeconds / 60);
+    const secs = Math.floor(totalSeconds % 60);
+    
+    if (showMs) {
+        // Show hundredths of a second for more precision when enabled
+        const centiseconds = Math.floor((ms % 1000) / 10);
+        return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}.${centiseconds.toString().padStart(2, '0')}`;
+    } else {
+        // Standard minutes:seconds format when milliseconds are disabled
+        return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+};
+
 // Timer component
 const Timer = ({ initialTime, onRemove }) => {
-    const [time, setTime] = useState(initialTime);
-    const [currentInitialTime, setCurrentInitialTime] = useState(initialTime);
+    // Time in milliseconds for high precision
+    const [timeMs, setTimeMs] = useState(initialTime * 1000);
+    const [currentInitialTimeMs, setCurrentInitialTimeMs] = useState(initialTime * 1000);
     const [isRunning, setIsRunning] = useState(false);
     const [name, setName] = useState(`${initialTime / 60} min timer`);
     const [isComplete, setIsComplete] = useState(false);
     const [audio] = useState(new Audio('trimmed_audio.mp3'));
     const [isAudioEnabled, setIsAudioEnabled] = useState(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-
+    const [showMilliseconds, setShowMilliseconds] = useState(false);
+    const [displayTime, setDisplayTime] = useState(formatTimeDisplay(initialTime * 1000, showMilliseconds));
+    // Use refs to avoid re-renders and improve precision
+    const startTimeRef = React.useRef(0);
+    const targetEndTimeRef = React.useRef(0);
+    const pausedTimeRemainingRef = React.useRef(0);
+    const lastUpdateTimeRef = React.useRef(0);
+    const driftCorrectionRef = React.useRef(0);
+    const animationFrameRef = React.useRef();
+    const driftCheckIntervalRef = React.useRef();
+    
+    // Drift compensation mechanism
     useEffect(() => {
-        let interval;
-        if (isRunning && time > 0) {
-            interval = setInterval(() => {
-                setTime((prevTime) => prevTime - 1);
-            }, 1000);
-        } else if (time === 0 && isRunning) {
-            setIsComplete(true);
-            setIsRunning(false);
-            playSound();
+        if (isRunning && timeMs > 0) {
+            // Clear any existing animation frames
+            if (animationFrameRef.current) {
+                cancelAnimationFrame(animationFrameRef.current);
+            }
+            
+            // Store the exact current time for precision
+            const now = performance.now();
+            
+            // If resuming from pause, use the stored remaining time
+            if (pausedTimeRemainingRef.current > 0) {
+                targetEndTimeRef.current = now + pausedTimeRemainingRef.current;
+                pausedTimeRemainingRef.current = 0;
+            } else {
+                // Starting fresh - set target end time
+                targetEndTimeRef.current = now + timeMs;
+            }
+            
+            startTimeRef.current = now;
+            lastUpdateTimeRef.current = now;
+            
+            // Set up drift checking at regular intervals (every 10 seconds)
+            driftCheckIntervalRef.current = setInterval(() => {
+                const currentTime = performance.now();
+                const elapsedTime = currentTime - startTimeRef.current;
+                const expectedTimeRemaining = targetEndTimeRef.current - currentTime;
+                const actualTimeRemaining = currentInitialTimeMs - elapsedTime;
+                
+                // Calculate drift (positive means timer is running slow, negative means fast)
+                const drift = actualTimeRemaining - expectedTimeRemaining;
+                
+                if (Math.abs(drift) > 10) { // Only correct if drift > 10ms
+                    // Store the drift correction
+                    driftCorrectionRef.current = drift;
+                    
+                    // Apply correction to target end time
+                    targetEndTimeRef.current += drift;
+                    
+                    console.log(`Drift detected: ${drift.toFixed(3)}ms, correcting timer`);
+                }
+            }, 10000);
+            
+            // Create debounced state updaters for better performance
+            const debouncedSetTimeMs = debounce((value) => {
+                setTimeMs(value);
+            }, 30); // Only update state every 30ms max
+            
+            // Separate time display updater to avoid UI jank
+            const updateDisplayTime = (value) => {
+                setDisplayTime(formatTimeDisplay(value, showMilliseconds));
+            };
+            
+            // High-precision timer using requestAnimationFrame
+            const updateTimer = () => {
+                if (!isRunning) return; // Ensure we don't continue if timer was stopped
+                
+                const currentTime = performance.now();
+                const frameTime = currentTime - lastUpdateTimeRef.current;
+                lastUpdateTimeRef.current = currentTime;
+                
+                // Check if we've been running too slow (tab in background, etc)
+                if (frameTime > 100) {
+                    console.log(`Timer slowed down: ${frameTime.toFixed(1)}ms between frames`);
+                    // Adjust for slow frames - recalculate based on actual elapsed time
+                    const actualElapsed = currentTime - startTimeRef.current;
+                    const shouldBeRemaining = currentInitialTimeMs - actualElapsed;
+                    if (Math.abs(shouldBeRemaining - (targetEndTimeRef.current - currentTime)) > 50) {
+                        // Correct the end time to match the real elapsed time
+                        targetEndTimeRef.current = currentTime + shouldBeRemaining;
+                        console.log(`Corrected timer end time by ${shouldBeRemaining - (targetEndTimeRef.current - currentTime)}ms`);
+                    }
+                }
+                
+                const remaining = Math.max(0, targetEndTimeRef.current - currentTime);
+                
+                // Update display every frame for smooth visualization
+                updateDisplayTime(remaining);
+                
+                // Only update state occasionally to prevent re-renders
+                if (Math.abs(remaining - timeMs) > 50 || remaining <= 0) {
+                    debouncedSetTimeMs(remaining);
+                }
+                
+                if (remaining <= 0) {
+                    clearInterval(driftCheckIntervalRef.current);
+                    setIsComplete(true);
+                    setIsRunning(false);
+                    playSound();
+                } else if (isRunning) {
+                    // Use timeout based on expected frame rate for better timer resolution
+                    // This is more precise than relying on browser's animation frame timing
+                    setTimeout(() => {
+                        animationFrameRef.current = requestAnimationFrame(updateTimer);
+                    }, 4); // Aim for ~250 fps for timer calculations, higher than display refresh
+                }
+            };
+            
+            // Start the animation frame loop
+            animationFrameRef.current = requestAnimationFrame(updateTimer);
+        } else if (!isRunning && timeMs > 0) {
+            // Store remaining time when paused
+            pausedTimeRemainingRef.current = timeMs;
         }
-        return () => clearInterval(interval);
-    }, [isRunning, time]);
+        
+        // Cleanup function
+        return () => {
+            if (animationFrameRef.current) {
+                cancelAnimationFrame(animationFrameRef.current);
+            }
+            if (driftCheckIntervalRef.current) {
+                clearInterval(driftCheckIntervalRef.current);
+            }
+        };
+    }, [isRunning, currentInitialTimeMs]);
 
     const playSound = () => {
         if (isAudioEnabled) {
@@ -142,8 +287,29 @@ const Timer = ({ initialTime, onRemove }) => {
 
     const resetTimer = () => {
         stopSound();
-        setTime(currentInitialTime);
+        
+        // Reset all timing related state and refs
+        setTimeMs(currentInitialTimeMs);
+        setDisplayTime(formatTimeDisplay(currentInitialTimeMs, showMilliseconds));
         setIsRunning(false);
+        
+        // Cancel all pending operations
+        if (animationFrameRef.current) {
+            cancelAnimationFrame(animationFrameRef.current);
+            animationFrameRef.current = null;
+        }
+        
+        if (driftCheckIntervalRef.current) {
+            clearInterval(driftCheckIntervalRef.current);
+            driftCheckIntervalRef.current = null;
+        }
+        
+        // Reset all refs
+        startTimeRef.current = 0;
+        targetEndTimeRef.current = 0;
+        pausedTimeRemainingRef.current = currentInitialTimeMs;
+        lastUpdateTimeRef.current = 0;
+        driftCorrectionRef.current = 0;
     };
 
     const handlePlayPause = () => {
@@ -151,25 +317,49 @@ const Timer = ({ initialTime, onRemove }) => {
             setIsAudioEnabled(true);
             audio.load();
         }
-        if (time === 0) {
-            setTime(1);
+        
+        if (timeMs <= 0) {
+            // Set to 1 second if timer is at zero
+            setTimeMs(1000);
+            setCurrentInitialTimeMs(1000);
+            // Reset refs for clean state
+            startTimeRef.current = 0;
+            targetEndTimeRef.current = 0;
+            pausedTimeRemainingRef.current = 1000;
+            driftCorrectionRef.current = 0;
             setIsRunning(true);
         } else {
+            // Toggle running state
             setIsRunning(!isRunning);
         }
     };
 
-    const formatTime = (seconds) => {
-        const mins = Math.floor(seconds / 60);
-        const secs = seconds % 60;
-        return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    // Toggle milliseconds display
+    const toggleMilliseconds = () => {
+        setShowMilliseconds(!showMilliseconds);
+        // Update display immediately
+        setDisplayTime(formatTimeDisplay(timeMs, !showMilliseconds));
     };
 
-    const adjustTime = (amount) => {
-        const newTime = Math.max(0, time + amount);
-        setTime(newTime);
+    // Use the global formatTimeDisplay function to avoid reference issues
+    const formatTime = (ms) => formatTimeDisplay(ms, showMilliseconds);
+
+    const adjustTime = (amountSecs) => {
+        const amountMs = amountSecs * 1000;
+        const newTimeMs = Math.max(0, timeMs + amountMs);
+        
+        setTimeMs(newTimeMs);
+        
         if (!isRunning) {
-            setCurrentInitialTime(newTime);
+            // Update initial time reference for drift calculations
+            setCurrentInitialTimeMs(newTimeMs);
+            pausedTimeRemainingRef.current = newTimeMs;
+        } else {
+            // Adjust the target end time when changing time during running
+            const now = performance.now();
+            targetEndTimeRef.current = now + newTimeMs;
+            // Reset drift correction when manually adjusting time
+            driftCorrectionRef.current = 0;
         }
     };
 
@@ -196,10 +386,10 @@ const Timer = ({ initialTime, onRemove }) => {
             <CardContent>
                 <div className="flex items-center justify-between mb-4">
                     <Button onClick={() => adjustTime(-30)} size="sm" variant="outline"><Minus /></Button>
-                    <span className="timer-display">{formatTime(time)}</span>
+                    <span className="timer-display">{displayTime}</span>
                     <Button onClick={() => adjustTime(30)} size="sm" variant="outline"><Plus /></Button>
                 </div>
-                <div className="flex justify-between">
+                <div className="flex justify-between mb-2">
                     <Button onClick={handlePlayPause} variant="outline">
                         {isRunning ? <Pause /> : <Play />}
                     </Button>
@@ -215,6 +405,16 @@ const Timer = ({ initialTime, onRemove }) => {
                             <X />
                         </Button>
                     )}
+                </div>
+                <div className="flex justify-center">
+                    <Button
+                        onClick={toggleMilliseconds}
+                        variant="outline"
+                        size="sm"
+                        className="text-xs"
+                    >
+                        {showMilliseconds ? "Hide ms" : "Show ms"}
+                    </Button>
                 </div>
             </CardContent>
             {showDeleteConfirm && (
@@ -258,7 +458,7 @@ const PomodoroApp = () => {
 
     return (
         <div className="container">
-            <h1>Pomodoro Timer App🍅</h1>
+            <h1>Atomic Precision Timer App🍅⏱️</h1>
             <div>
                 <button className="btn" onClick={() => addTimer(5)}>Add 5min</button>
                 <button className="btn" onClick={() => addTimer(10)}>Add 10min</button>
@@ -273,7 +473,7 @@ const PomodoroApp = () => {
             ))}
             <footer className={"app-footer"}>
                 <a href="https://github.com/dmytro-pro/react-timer" className="github-link" target="_blank">
-                    <img className={"bottom-logo"} src="github-mark.svg" alt="github logo"/>dmytro-pro/react-timer
+                    dmytro-pro/react-timer
                 </a>
             </footer>
         </div>
